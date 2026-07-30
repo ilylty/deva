@@ -128,7 +128,9 @@ DEVA_DIR    = "/content/deva"
 # 1) 装依赖
 subprocess.run("pip install -q fastapi uvicorn pydantic python-multipart", shell=True, check=True)
 
-# 2) 下载 server.py (改下面的 raw 地址为你的 repo 路径)
+# 2) 下载 server.py (每次重跑都拉 GitHub main 最新版, 修复会自动生效)
+import shutil
+shutil.rmtree(f"{DEVA_DIR}/envs", ignore_errors=True)   # 清掉可能损坏的旧 venv
 os.makedirs(DEVA_DIR, exist_ok=True)
 subprocess.run(
     "curl -L -o server.py https://raw.githubusercontent.com/ilylty/deva/main/deva-server/server.py",
