@@ -1,0 +1,21 @@
+# 运行时产物 (服务端)
+deva-server/deva-server.log
+deva-server/tasks.db
+deva-server/logs/
+deva-server/manifests/
+deva-server/workspaces/
+deva-server/envs/
+deva-server/run.out
+deva-server/config.json
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# 本地配置
+.deva/

@@ -1,0 +1,8 @@
+{
+  "token": "CHANGE_ME_TO_STRONG_RANDOM_TOKEN",
+  "host": "0.0.0.0",
+  "port": 8766,
+  "work_root": "~/deva-server/workspaces",
+  "logs_dir": "~/deva-server/logs",
+  "db_path": "~/deva-server/tasks.db"
+}
