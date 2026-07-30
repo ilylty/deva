@@ -275,6 +275,10 @@ def cmd_fetch(args):
         print(f"目录已拉取: {target}/ ({size}B tar)")
     else:
         target = local or Path(remote).name
+        # 确保目标父目录存在 (fetch 到子目录时不会因目录缺失而失败)
+        parent = os.path.dirname(target)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
         os.rename(tmp.name, target)
         print(f"文件已拉取: {target} ({size}B)")
 
