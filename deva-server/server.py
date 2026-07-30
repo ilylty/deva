@@ -587,14 +587,22 @@ def env_create(req: EnvCreateReq, _: None = Depends(auth)):
         raise HTTPException(status_code=409, detail=f"环境 {req.name} 已存在")
     py = req.python or sys.executable
     log.info("create env=%s python=%s", req.name, py)
+    # 先试标准 venv; 若 ensurepip 失败 (如 Colab 精简 python), 回退 --system-site-packages
     try:
         subprocess.run([py, "-m", "venv", str(d)], check=True, timeout=300,
                        capture_output=True, text=True)
     except subprocess.CalledProcessError as e:
-        raise HTTPException(status_code=500, detail=f"venv 创建失败: {e.stderr or e}")
+        log.warning("venv 标准创建失败, 回退 --system-site-packages: %s", e.stderr or e)
+        try:
+            subprocess.run([py, "-m", "venv", "--system-site-packages", str(d)],
+                           check=True, timeout=300, capture_output=True, text=True)
+        except subprocess.CalledProcessError as e2:
+            raise HTTPException(status_code=500, detail=f"venv 创建失败: {e2.stderr or e2}")
+        except subprocess.TimeoutExpired:
+            raise HTTPException(status_code=500, detail="venv 创建超时")
     except subprocess.TimeoutExpired:
         raise HTTPException(status_code=500, detail="venv 创建超时")
-    # 升级 pip
+    # 升级 pip (若 venv 自带)
     try:
         subprocess.run([str(d / 'bin' / 'python'), "-m", "pip", "install", "--upgrade", "pip"],
                        capture_output=True, text=True, timeout=120)
