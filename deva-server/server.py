@@ -580,6 +580,36 @@ def env_ls(_: None = Depends(auth)):
     return ok({"envs": list_envs(), "envs_dir": str(ENVS_DIR)})
 
 
+def _ensure_pip_in_venv(d: Path) -> bool:
+    """确保 venv 内有 pip: 先用自身, 没有则用系统 pip 注入到 venv site-packages。"""
+    py = d / "bin" / "python"
+    try:
+        subprocess.run([str(py), "-m", "pip", "--version"], capture_output=True,
+                       text=True, timeout=30, check=True)
+        return True
+    except Exception:
+        pass
+    # 找 venv 的 site-packages 目录 (lib/pythonX.Y/site-packages)
+    lib = d / "lib"
+    if not lib.exists():
+        return False
+    sub = sorted(p for p in lib.iterdir() if p.is_dir())
+    if not sub:
+        return False
+    sp = sub[0] / "site-packages"
+    sp.mkdir(parents=True, exist_ok=True)
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--target", str(sp), "pip"],
+            capture_output=True, text=True, timeout=300, check=True,
+        )
+        log.info("venv %s: 用系统 pip 注入 pip 到 %s", d.name, sp)
+        return True
+    except Exception as e:
+        log.warning("venv %s 注入 pip 失败: %s", d.name, e)
+        return False
+
+
 @app.post("/env/create")
 def env_create(req: EnvCreateReq, _: None = Depends(auth)):
     d = env_dir(req.name)
@@ -587,21 +617,16 @@ def env_create(req: EnvCreateReq, _: None = Depends(auth)):
         raise HTTPException(status_code=409, detail=f"环境 {req.name} 已存在")
     py = req.python or sys.executable
     log.info("create env=%s python=%s", req.name, py)
-    # 先试标准 venv; 若 ensurepip 失败 (如 Colab 精简 python), 回退 --system-site-packages
+    # 创建 venv (Colab 等环境下 ensurepip 可能失败, 但 venv 目录已生成, 不中断)
     try:
-        subprocess.run([py, "-m", "venv", str(d)], check=True, timeout=300,
-                       capture_output=True, text=True)
+        subprocess.run([py, "-m", "venv", str(d)], timeout=300,
+                       capture_output=True, text=True, check=True)
     except subprocess.CalledProcessError as e:
-        log.warning("venv 标准创建失败, 回退 --system-site-packages: %s", e.stderr or e)
-        try:
-            subprocess.run([py, "-m", "venv", "--system-site-packages", str(d)],
-                           check=True, timeout=300, capture_output=True, text=True)
-        except subprocess.CalledProcessError as e2:
-            raise HTTPException(status_code=500, detail=f"venv 创建失败: {e2.stderr or e2}")
-        except subprocess.TimeoutExpired:
-            raise HTTPException(status_code=500, detail="venv 创建超时")
+        log.warning("venv ensurepip 失败 (继续, 稍后注入 pip): %s", e.stderr or e)
     except subprocess.TimeoutExpired:
         raise HTTPException(status_code=500, detail="venv 创建超时")
+    if not _ensure_pip_in_venv(d):
+        raise HTTPException(status_code=500, detail="venv 创建失败: 无法在环境中安装 pip")
     # 升级 pip (若 venv 自带)
     try:
         subprocess.run([str(d / 'bin' / 'python'), "-m", "pip", "install", "--upgrade", "pip"],
